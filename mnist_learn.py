@@ -36,6 +36,7 @@ images, labels = dataiter.next()
 print(' '.join('%2d' % labels[j] for j in range(4)))
 imshow(torchvision.utils.make_grid(images))
 
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()

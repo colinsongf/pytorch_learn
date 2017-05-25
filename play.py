@@ -15,11 +15,11 @@ transform = transforms.Compose(
 )
 trainset = torchvision.datasets.MNIST(root='./mnistdata', train=True,
                                         download=True, transform=transform)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=1,
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=4,
                                           shuffle=True, num_workers=2)
 testset = torchvision.datasets.MNIST(root='./mnistdata', train=False,
                                        download=True, transform=transform)
-testloader = torch.utils.data.DataLoader(testset, batch_size=1,
+testloader = torch.utils.data.DataLoader(testset, batch_size=4,
                                          shuffle=False, num_workers=2)
 
 dtype = torch.cuda.FloatTensor
@@ -29,19 +29,22 @@ class CJNet(nn.Module):
     def __init__(self):
         super(CJNet, self).__init__()
 
-        self.input_dim = 160
+        self.input_dim = 50
         self.hidden_dim = 200
         self.output_dim = 10
 
         self.iw = Variable(torch.randn(self.input_dim, self.hidden_dim).type(dtype), requires_grad=True)
-        self.w = Variable(torch.randn(self.hidden_dim, self.hidden_dim).type(dtype), requires_grad=True)
+        self.w = Variable(torch.randn(self.hidden_dim, self.hidden_dim).type(dtype), requires_grad=False)
         self.state = Variable(torch.randn(1, self.hidden_dim).type(dtype))
         self.ow = Variable(torch.randn(self.hidden_dim, self.output_dim).type(dtype), requires_grad=True)
-        self.parms = [self.iw, self.w, self.ow]
+        self.parms = [self.iw
+                      ,self.ow
+                      # ,self.w
+                      ]
 
-        self.conv1 = nn.Conv2d(1, 50, 5)
+        self.conv1 = nn.Conv2d(1, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(50, 16, 5)
+        self.conv2 = nn.Conv2d(6, 16, 5)
         self.fc1 = nn.Linear(16 * 4 * 4, self.input_dim)
 
     def forward(self, x):
@@ -50,18 +53,23 @@ class CJNet(nn.Module):
         x = x.view(-1, 16 * 4 * 4)
         x = F.relu(self.fc1(x))
 
-
         s1 = F.tanh(x.mm(self.iw))
-        s2 = self.state * 0.5 + s1 * 0.5
-        s2 = s2.mm(self.w) / self.hidden_dim
-        y = s2.mm(self.ow)
+        s1 = F.tanh(s1.mm(self.w) / self.hidden_dim + s1)
+        s1 = s1.mm(self.w) / self.hidden_dim
+        y = s1.mm(self.ow)
 
-        return y, s2
+        return y
+
+    # def update_cjp(self):
+    #     for p in self.parms:
+    #         p.data.sub_(p.grad.data * 0.001)
+    #         p.grad.data.zero_()
 
 
 net = CJNet().cuda()
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+parms = list(net.parameters())+net.parms
+optimizer = optim.SGD(parms, lr=0.002, momentum=0.9)
 
 for epoch in range(1):  # loop over the dataset multiple times
 
@@ -77,15 +85,16 @@ for epoch in range(1):  # loop over the dataset multiple times
         optimizer.zero_grad()
 
         # forward + backward + optimize
-        outputs, s2 = net(inputs)
+        outputs= net(inputs)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
+        # net.update_cjp()
 
-        loss_raw = loss.data[0]
-        s2_no_grad = s2.detach()
-        a = 0.01 / (pow(loss_raw, 2) + 1)
-        net.state = net.state * (1 - a) + s2_no_grad * a
+        # loss_raw = loss.data[0]
+        # s2_no_grad = s2.detach()
+        # a = 0.01 / (pow(loss_raw, 2) + 1)
+        # net.state = net.state * (1 - a) + s2_no_grad * a
 
         # print statistics
         running_loss += loss.data[0]
@@ -99,11 +108,10 @@ correct = 0
 total = 0
 for data in testloader:
     images, labels = data
-    outputs = net(Variable(images.cuda()))
+    outputs= net(Variable(images.cuda()))
     _, predicted = torch.max(outputs.data, 1)
     total += labels.size(0)
     correct += (predicted == labels.cuda()).sum()
-    break
 
 print('Accuracy of the network on the 10000 test images: %f %%' % (
     100.0 * correct / total))
