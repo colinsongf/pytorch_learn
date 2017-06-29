@@ -29,17 +29,30 @@ class CJNet(nn.Module):
     def __init__(self):
         super(CJNet, self).__init__()
 
-        self.input_dim = 50
-        self.hidden_dim = 200
+        self.input_dim = 120
+        self.hidden_dim = 50
         self.output_dim = 10
 
-        self.iw = Variable(torch.randn(self.input_dim, self.hidden_dim).type(dtype), requires_grad=True)
-        self.w = Variable(torch.randn(self.hidden_dim, self.hidden_dim).type(dtype), requires_grad=False)
-        self.state = Variable(torch.randn(1, self.hidden_dim).type(dtype))
-        self.ow = Variable(torch.randn(self.hidden_dim, self.output_dim).type(dtype), requires_grad=True)
-        self.parms = [self.iw
-                      ,self.ow
-                      # ,self.w
+        self.wi_0 = Variable(torch.randn(self.input_dim, self.hidden_dim).type(dtype), requires_grad=True)
+        self.wi_1 = Variable(torch.randn(self.input_dim, self.hidden_dim).type(dtype), requires_grad=True)
+        self.wi_2 = Variable(torch.randn(self.input_dim, self.hidden_dim).type(dtype), requires_grad=True)
+        self.wi_3 = Variable(torch.randn(self.input_dim, self.hidden_dim).type(dtype), requires_grad=True)
+        self.w0_1 = Variable(torch.randn(self.hidden_dim, self.hidden_dim).type(dtype), requires_grad=True)
+        self.w1_2 = Variable(torch.randn(self.hidden_dim, self.hidden_dim).type(dtype), requires_grad=True)
+        self.w2_3 = Variable(torch.randn(self.hidden_dim, self.hidden_dim).type(dtype), requires_grad=True)
+        self.w1_o = Variable(torch.randn(self.hidden_dim, self.output_dim).type(dtype), requires_grad=True)
+        self.w2_o = Variable(torch.randn(self.hidden_dim, self.output_dim).type(dtype), requires_grad=True)
+        self.w3_o = Variable(torch.randn(self.hidden_dim, self.output_dim).type(dtype), requires_grad=True)
+        self.parms = [self.wi_0
+                      ,self.wi_1
+                      ,self.wi_2
+                      ,self.wi_3
+                      ,self.w0_1
+                      ,self.w1_2
+                      ,self.w2_3
+                      ,self.w1_o
+                      ,self.w2_o
+                      ,self.w3_o
                       ]
 
         self.conv1 = nn.Conv2d(1, 6, 5)
@@ -53,10 +66,11 @@ class CJNet(nn.Module):
         x = x.view(-1, 16 * 4 * 4)
         x = F.relu(self.fc1(x))
 
-        s1 = F.tanh(x.mm(self.iw))
-        s1 = F.tanh(s1.mm(self.w) / self.hidden_dim + s1)
-        s1 = s1.mm(self.w) / self.hidden_dim
-        y = s1.mm(self.ow)
+        s0 = F.tanh(x.mm(self.wi_0))
+        s1 = x.mm(self.wi_1) + F.tanh(s0.mm(self.w0_1))
+        s2 = x.mm(self.wi_2) + F.tanh(s1.mm(self.w1_2))
+        s3 = x.mm(self.wi_3) + F.tanh(s2.mm(self.w2_3))
+        y = s1.mm(self.w1_o) + s2.mm(self.w2_o) + s3.mm(self.w3_o)
 
         return y
 
